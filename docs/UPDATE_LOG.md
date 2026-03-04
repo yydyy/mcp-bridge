@@ -410,3 +410,24 @@
 - **验证**: 创建的预制体文件结构与编辑器原生拖拽创建的预制体完全一致，可正常打开编辑、实例化使用，控制台零报错。
 
 ps: 感谢 @亮仔😂 😁 🐔否？ 提供的反馈以及操作日志
+
+---
+
+## 性能优化与防御性增强 (2026-03-04)
+
+### 1. JSON 响应压缩输出 (`src/main.js`)
+
+- **问题**: MCP 工具调用返回结果时使用 `JSON.stringify(result, null, 2)` 格式化输出，凭空增加约 20-40% 的响应体积，消耗额外 Token 且对 AI 工具毫无意义。
+- **修复**: 移除缩进参数，改为 `JSON.stringify(result)` 压缩输出。
+- **效果**: 响应体积减少 20-40%，直接降低 AI 模型的 Token 消耗成本。
+
+### 2. 指令队列长度限制 (`src/main.js`)
+
+- **问题**: `commandQueue` 数组无最大长度限制，理论上在极端情况下可能无限增长。
+- **修复**: 新增 `MAX_QUEUE_LENGTH = 100` 常量。`enqueueCommand` 入口检查队列长度，超限时直接 reject 并返回 HTTP 429 状态码，同时记录告警日志。
+- **保护**: 在 `enqueueCommand` 调用处补充 `.catch()` 处理 reject，确保 HTTP 响应正常关闭，避免 unhandled promise rejection。
+
+### 3. 层级树子节点数量上限 (`src/scene-script.js`)
+
+- **问题**: `get-hierarchy` 的 `dumpNodes` 递归遍历子节点时无数量限制，若某个节点下有数百个同级子节点，返回数据量巨大。
+- **修复**: 新增 `MAX_CHILDREN_PER_LEVEL = 50` 安全上限。每层最多返回 50 个子节点，超出部分在返回数据中通过 `childrenTruncated` 字段标注被截断的数量，帮助 AI 知悉还有更多子节点未列出。
