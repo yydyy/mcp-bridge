@@ -2163,13 +2163,6 @@ CCProgram fs %{
 	 * @param {Function} [postCreateModifier] 在关闭 Watcher 的隔离区内执行的额外元数据修改回调
 	 */
 	_safeCreateAsset(path, content, originalCallback, postCreateModifier = null) {
-		let hasNewDir = false;
-		try {
-			hasNewDir = this._ensureParentDirSync(path);
-		} catch (e) {
-			return originalCallback(`创建物理目录失败: ${e.message}`);
-		}
-
 		const fspath = this._getFsPath(path);
 		if (!fspath) {
 			return originalCallback(`无法手动解析文件系统路径: ${path}`);
@@ -2183,8 +2176,15 @@ CCProgram fs %{
 			originalCallback(null, msg);
 		};
 
-		// 暂停 Watcher 防止竞态
+		// 极其关键：必须在进行任何物理增删操作前暂停 Watcher，防止后台快照抢先处理刚建好的目录
 		Editor.AssetDB.runDBWatch("off");
+
+		let hasNewDir = false;
+		try {
+			hasNewDir = this._ensureParentDirSync(path);
+		} catch (e) {
+			return doneCreate(`创建物理目录失败: ${e.message}`);
+		}
 
 		try {
 			// 直接物理写入文件，绕过 Editor.assetdb.create 的内部设计缺陷
